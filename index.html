@@ -550,8 +550,18 @@ function checkResp(d){
 function mapP(x,st,sl){
   var domain=document.getElementById('dom').value;
   var asin=x.asin||'';
+  // Rating birden fazla alanda gelebilir; ilk geçerli (>0) olanı al
+  var rat=parseFloat(x.rating);
+  if(!(rat>0)&&x.rating_breakdown&&x.rating_breakdown.rating)rat=parseFloat(x.rating_breakdown.rating);
+  if(!(rat>0)&&typeof x.stars!=='undefined')rat=parseFloat(x.stars);
+  if(!(rat>0))rat=0;
+  // Yorum sayısı da farklı alanlarda olabilir
+  var rev=parseInt(x.ratings_total);
+  if(!(rev>0)&&typeof x.reviews_total!=='undefined')rev=parseInt(x.reviews_total);
+  if(!(rev>0)&&typeof x.reviews!=='undefined')rev=parseInt(x.reviews);
+  if(!(rev>0))rev=0;
   return{asin:asin,title:(x.title||'').slice(0,150),url:x.link||('https://www.'+domain+'/dp/'+asin),
-    rating:x.rating||0,review_count:x.ratings_total||0,price:fmtP(x.price),price_num:(x.price&&x.price.value)||0,
+    rating:rat,review_count:rev,price:fmtP(x.price),price_num:(x.price&&x.price.value)||0,
     sponsored:x.is_sponsored||false,bsr:0,monthly_sales_est:0,category:'',st:st,sl:sl,
     scraped_at:new Date().toISOString().slice(0,16).replace('T',' ')};
 }
