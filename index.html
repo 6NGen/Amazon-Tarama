@@ -356,8 +356,13 @@ function onKeyInput(){} // backend modunda kullanılmıyor
 function setDot(c){document.getElementById('api-dot').className='dot'+(c?' '+c:'');}
 
 async function silentTest(){
-  try{var d=await rfetch('search','test',1,null);if(d&&!d.error&&d.request_info&&d.request_info.success)setDot('ok');else setDot('err');}
-  catch(e){setDot('err');}
+  // Açılış kontrolü: Rainforest'a istek atmaz (kredi harcamaz),
+  // yalnızca backend'in ayakta ve API anahtarının yapılandırılmış olduğunu doğrular.
+  try{
+    var resp=await Promise.race([fetch(API_ENDPOINT+'?type=ping'),timeoutPromise(10000)]);
+    var d=await resp.json();
+    setDot(d&&d.ok&&d.configured?'ok':'err');
+  }catch(e){setDot('err');}
 }
 
 function timeoutPromise(ms){
@@ -508,7 +513,7 @@ async function runAll(){
             var brl=pr.bestsellers_rank||[];
             if(brl.length){products[di].bsr=brl[0].rank||0;products[di].monthly_sales_est=bsr2s(products[di].bsr);}
             if(pr.categories_flat)products[di].category=pr.categories_flat;
-            var bp=pr.buybox_winner&&pr.buybox_winner.price;if(bp)products[di].price=fmtP(bp);
+            var bp=pr.buybox_winner&&pr.buybox_winner.price;if(bp){products[di].price=fmtP(bp);if(bp.value)products[di].price_num=bp.value;}
           }
         }catch(e){}
         setP((ji/total)*100+(di/products.length)*(100/total)*0.45);await wait(550);
