@@ -345,6 +345,21 @@ var LABELS={kitchen:'Mutfak',home:'Ev ve Bahçe',sports:'Spor',electronics:'Elek
 // Artık ücretsiz CORS proxy YOK. İstekler kendi Vercel backend'imize
 // (/api/scan) gider. API anahtarı orada (Vercel env) saklanır, burada değil.
 var API_ENDPOINT='/api/scan';
+// Hata ayıklama: siteyi ?debug=1 ile aç → ilk ürünün ham puan alanları günlüğe yazılır
+var DEBUG=/[?&]debug=1/.test(location.search);
+var dbgShown=false;
+function dbgDump(items){
+  if(!DEBUG||dbgShown||!items||!items.length)return;
+  dbgShown=true;
+  var x=items[0];
+  log('🐞 DEBUG ham alanlar (ilk ürün):','lwrn');
+  log('   rating='+JSON.stringify(x.rating)+' (tip:'+typeof x.rating+')','lwrn');
+  log('   ratings_total='+JSON.stringify(x.ratings_total)+' (tip:'+typeof x.ratings_total+')','lwrn');
+  log('   rating_breakdown='+JSON.stringify(x.rating_breakdown),'lwrn');
+  log('   reviews='+JSON.stringify(x.reviews)+' reviews_total='+JSON.stringify(x.reviews_total),'lwrn');
+  log('   tüm anahtarlar: '+Object.keys(x).join(', '),'lwrn');
+  try{console.log('[Amazon-Tarama DEBUG] ilk ürün tam JSON:',x);}catch(e){}
+}
 
 window.onload=function(){
   var keyEl=document.getElementById('api-key');
@@ -471,7 +486,7 @@ async function runAll(){
           log('  Sayfa '+pg+'/'+maxPg+'...');
           var d=await rfetch('search',job.v,pg,null);
           var chk=checkResp(d);if(chk){log('  ✗ '+chk,'lerr');errCount++;break;}
-          var items=d.search_results||[];log('  ✓ '+items.length+' ürün','lok');
+          var items=d.search_results||[];log('  ✓ '+items.length+' ürün','lok');dbgDump(items);
           items.forEach(function(x){products.push(mapP(x,'s',job.l));});
           setP(((ji+pg/maxPg)/total)*50);await wait(900);
         }
@@ -480,7 +495,7 @@ async function runAll(){
           log('  Sayfa '+pg+'/'+maxPg+'...');
           var d=await rfetch('category',null,pg,catUrl(job.v));
           var chk=checkResp(d);if(chk){log('  ✗ '+chk,'lerr');errCount++;break;}
-          var items=d.search_results||[];log('  ✓ '+items.length+' ürün','lok');
+          var items=d.search_results||[];log('  ✓ '+items.length+' ürün','lok');dbgDump(items);
           items.forEach(function(x){products.push(mapP(x,'c',job.l));});
           setP(((ji+pg/maxPg)/total)*50);await wait(900);
         }
@@ -558,17 +573,17 @@ function checkResp(d){
 function parseRating(v){
   if(typeof v==='number')return(v>0&&v<=5)?v:0;
   if(v==null)return 0;
-  var s=String(v).trim();if(!s)return 0;
-  // Türkçe: "5 üzerinden 4,6" → üzerinden SONRASI gerçek puandır
-  var tr=s.match(/üzerinden\s*([\d]+(?:[.,]\d+)?)/i);
-  if(tr)return clampRating(tr[1]);
-  // İngilizce: "4.6 out of 5" veya "4.6 / 5" → öncesi gerçek puandır
-  var en=s.match(/([\d]+(?:[.,]\d+)?)\s*(?:out of|\/)/i);
-  if(en)return clampRating(en[1]);
-  // Düz değer (ör. "4,6" veya "4.6")
-  return clampRating(s);
+  // Virgüllü ondalığı noktaya çevir, sonra metindeki TÜM sayıları çıkar.
+  // Örn "5 üzerinden 4,6" → [5, 4.6] ; "4,6 / 5" → [4.6, 5]
+  var s=String(v).replace(/(\d),(\d)/g,'$1.$2');
+  var nums=(s.match(/\d+(?:\.\d+)?/g)||[]).map(parseFloat);
+  var inRange=nums.filter(function(n){return n>0&&n<=5;});
+  if(!inRange.length)return 0;
+  // Gerçek puan neredeyse her zaman ondalıklıdır (4.6, 3.8); maksimum ise tam "5".
+  // Sıra ne olursa olsun ondalıklı olanı tercih et; yoksa ilk geçerli sayı.
+  var frac=inRange.filter(function(n){return n%1!==0;});
+  return frac.length?frac[0]:inRange[0];
 }
-function clampRating(s){var f=parseFloat(String(s).replace(',', '.'));return(f>0&&f<=5)?f:0;}
 // Yorum sayısı: Türkçe binlik ayırıcı "." ile gelebilir ("42.742") → tüm rakam-dışını at.
 // (Aksi halde parseInt("42.742") = 42 olurdu.)
 function parseReviews(v){
